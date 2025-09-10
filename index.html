@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GitHub Photo Gallery</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #gallery { display: flex; flex-wrap: wrap; gap: 12px; }
+    .card { width: 200px; border: 1px solid #ddd; padding: 8px; border-radius: 6px; text-align: center; }
+    img { max-width: 100%; height: 120px; object-fit: cover; border-radius: 4px; }
+    input,button { padding: 8px; margin: 6px 0; }
+    small { color:#666; }
+  </style>
+</head>
+<body>
+  <h2>📸 GitHub Photo Gallery</h2>
+
+  <label>GitHub Owner: <input id="owner" value="reelsanskaar-creator"></label><br>
+  <label>Repo name: <input id="repo" value="My-company-"></label><br>
+  <label>Branch: <input id="branch" value="main"></label><br>
+  <label>Folder: <input id="folder" value="gallery"></label><br>
+  <label>Personal Access Token: <input id="token" type="password" style="width:420px"></label><br>
+  <small>⚠️ Token must be a <b>Fine-grained PAT</b> with <b>Contents → Read/Write</b></small>
+
+  <hr>
+
+  <input id="filein" type="file" accept="image/*" />
+  <button id="uploadBtn">Upload to GitHub</button>
+  <div id="status"></div>
+
+  <hr>
+  <h3>Gallery</h3>
+  <div id="gallery">Loading…</div>
+
+<script>
+async function listImages() {
+  const owner = document.getElementById('owner').value.trim();
+  const repo = document.getElementById('repo').value.trim();
+  const branch = document.getElementById('branch').value.trim();
+  const folder = document.getElementById('folder').value.trim();
+  const gallery = document.getElementById('gallery');
+  gallery.innerHTML = 'Loading…';
+
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${folder}?ref=${branch}`;
+  try {
+    const res = await fetch(url);
+    if(!res.ok) { gallery.innerHTML = '❌ Could not list folder. Make sure repo/folder exist.'; return; }
+    const items = await res.json();
+    gallery.innerHTML = '';
+    items.filter(i=>i.type==='file').forEach(file => {
+      const imgUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${folder}/${file.name}`;
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `<img src="${imgUrl}" alt="${file.name}" />
+                       <div>${file.name}</div>
+                       <a href="${imgUrl}" target="_blank">Open</a>`;
+      gallery.appendChild(div);
+    });
+  } catch(e){
+    gallery.innerHTML = 'Error: ' + e.message;
+  }
+}
+
+async function uploadFile() {
+  const f = document.getElementById('filein').files[0];
+  if(!f){ alert('Select an image first'); return; }
+  const owner = document.getElementById('owner').value.trim();
+  const repo = document.getElementById('repo').value.trim();
+  const branch = document.getElementById('branch').value.trim();
+  const folder = document.getElementById('folder').value.trim();
+  const token = document.getElementById('token').value.trim();
+
+  if(!token){ alert('Enter a GitHub fine-grained token'); return; }
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(',')[1];
+    const path = `${folder}/${Date.now()}_${f.name}`;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+
+    const body = {
+      message: `Add image ${f.name}`,
+      content: base64,
+      branch: branch
+    };
+
+    document.getElementById('status').innerText = '⏳ Uploading…';
+    try {
+      const res = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json'
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if(res.ok){
+        document.getElementById('status').innerText = '✅ Uploaded!';
+        listImages();
+      } else {
+        document.getElementById('status').innerText = '❌ Upload failed: ' + (data.message || JSON.stringify(data));
+        console.error(data);
+      }
+    } catch(err){
+      document.getElementById('status').innerText = '❌ Error: ' + err.message;
+    }
+  };
+  reader.readAsDataURL(f);
+}
+
+document.getElementById('uploadBtn').addEventListener('click', uploadFile);
+window.addEventListener('load', () => setTimeout(listImages, 500));
+</script>
+</body>
+</html>
